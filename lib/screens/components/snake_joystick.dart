@@ -24,8 +24,8 @@ class _SnakeJoystickState extends State<SnakeJoystick> {
     return Joystick(
       mode: JoystickMode.horizontalAndVertical,
       stick: Container(
-        width: 100,
-        height: 100,
+        width: 120,
+        height: 120,
         decoration: BoxDecoration(
           border: Border.all(color: Colors.white, width: 3),
           color: ThemeConstants.joyStickColor,

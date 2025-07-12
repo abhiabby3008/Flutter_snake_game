@@ -18,10 +18,13 @@ class GameScreen extends StatefulWidget {
 
 class _GameScreenState extends State<GameScreen> {
   static const int rows = 20, cols = 20;
-  static const tickRate = Duration(milliseconds: 200);
+  static const Duration minTick = Duration(milliseconds: 50);
+  static const Duration maxTick = Duration(milliseconds: 300);
 
-  late final Timer _timer;
+  Timer? _timer;
+  late Duration _currentTick;
   final ValueNotifier<int> _repaint = ValueNotifier<int>(0);
+  bool _isPaused = false;
 
   List<Point<int>> _snake = [Point(cols ~/ 2, rows ~/ 2)];
   late Point<int> _food;
@@ -32,14 +35,67 @@ class _GameScreenState extends State<GameScreen> {
   void initState() {
     super.initState();
     _spawnFood();
-    _timer = Timer.periodic(tickRate, (_) => _tick());
+    _currentTick = maxTick;
+    _timer = Timer.periodic(_currentTick, (_) => _tick());
   }
 
   @override
   void dispose() {
-    _timer.cancel();  
+    _timer?.cancel();
     _repaint.dispose();
     super.dispose();
+  }
+
+  void _startTimer() {
+    if (_isPaused) return;
+    _timer?.cancel();
+    _timer = Timer.periodic(_currentTick, (_) => _tick());
+  }
+
+  void _resetTimerWithNewSpeed() {
+    const int baseScore = 10; // one food
+    final int foodsEaten = _score ~/ baseScore;
+
+    // Use a decay function to gradually speed up over time
+    // speedFactor ∈ (0..1), where 1 means "no speed up", and 0 means "max speed"
+    final double speedFactor = 1 / (1 + foodsEaten * 0.15);
+
+    // Ease the tick duration toward minTick
+    final int newMs = (minTick.inMilliseconds +
+            (maxTick.inMilliseconds - minTick.inMilliseconds) * speedFactor)
+        .clamp(minTick.inMilliseconds, maxTick.inMilliseconds)
+        .toInt();
+
+    final Duration newTick = Duration(milliseconds: newMs);
+
+    if (newTick != _currentTick) {
+      _currentTick = newTick;
+      _timer?.cancel();
+      _startTimer();
+    }
+    print('Speed tick: $_currentTick, foodsEaten: $foodsEaten');
+  }
+
+  void _pauseGame() {
+    if (_isPaused) return;
+    _isPaused = true;
+    _timer?.cancel();
+    setState(() {});
+  }
+
+  void _resumeGame() {
+    if (!_isPaused) return;
+    _isPaused = false;
+    _startTimer();
+    setState(() {});
+  }
+
+  void _togglePause() {
+    if (_isPaused) {
+      _resumeGame();
+    } else {
+      _pauseGame();
+    }
   }
 
   void _spawnFood() {
@@ -52,6 +108,7 @@ class _GameScreenState extends State<GameScreen> {
   }
 
   void _tick() {
+    if (_isPaused) return;
     final head = _snake.first;
     late Point<int> newHead;
 
@@ -76,7 +133,7 @@ class _GameScreenState extends State<GameScreen> {
 
     // 2) Check self‑collision
     if (newHead != head && _snake.contains(newHead)) {
-      _timer.cancel();
+      _timer?.cancel();
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
           builder: (_) => GameOverScreen(score: _score),
@@ -96,6 +153,7 @@ class _GameScreenState extends State<GameScreen> {
         _score += 10;
         _spawnFood();
         // tail stays → snake grows
+        _resetTimerWithNewSpeed(); // ← speed up now that we ate
       } else if (newHead != head) {
         _snake.removeLast();
       }
@@ -120,57 +178,72 @@ class _GameScreenState extends State<GameScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: ThemeConstants.backgroundColor,
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const SizedBox(height: 20),
-              GlobalText(
-                fontSize: 35,
-                text: _score.toString().padLeft(5, '0'),
-                fontWeight: FontWeight.bold,
-                fontFamily: "Pixelify Sans",
-              ),
-              const SizedBox(height: 25),
-              // game pad
-              AspectRatio(
-                aspectRatio: cols / rows,
-                child: RepaintBoundary(
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: ThemeConstants.gamePadColor,
-                      borderRadius: BorderRadius.circular(5),
-                    ),
-                    child: CustomPaint(
-                      painter: _SnakePainter(
-                        snake: _snake,
-                        food: _food,
-                        rows: rows,
-                        cols: cols,
-                        repaint: _repaint,
+        backgroundColor: ThemeConstants.backgroundColor,
+        body: SafeArea(
+          child: Stack(children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SizedBox(height: 20),
+                  GlobalText(
+                    fontSize: 35,
+                    text: _score.toString().padLeft(5, '0'),
+                    fontWeight: FontWeight.bold,
+                    fontFamily: "Pixelify Sans",
+                  ),
+                  const SizedBox(height: 25),
+                  // game pad
+                  AspectRatio(
+                    aspectRatio: cols / rows,
+                    child: RepaintBoundary(
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: ThemeConstants.gamePadColor,
+                          borderRadius: BorderRadius.circular(5),
+                        ),
+                        child: CustomPaint(
+                          painter: _SnakePainter(
+                            snake: _snake,
+                            food: _food,
+                            rows: rows,
+                            cols: cols,
+                            repaint: _repaint,
+                          ),
+                        ),
                       ),
                     ),
                   ),
-                ),
-              ),
 
-              const SizedBox(height: 90),
+                  const SizedBox(height: 90),
 
-              // joystick
-              Center(
-                child: SnakeJoystick(
-                  onDirectionChanged: _onDirectionChanged,
-                ),
+                  // joystick
+                  Center(
+                    child: SnakeJoystick(
+                      onDirectionChanged: _onDirectionChanged,
+                    ),
+                  ),
+                ],
               ),
-            ],
-          ),
-        ),
-      ),
-    );
+            ),
+            // Pause/Resume button in top left
+            Positioned(
+              top: 10,
+              right: 10,
+              child: IconButton(
+                icon: Icon(
+                  _isPaused ? Icons.play_arrow : Icons.pause,
+                  size: 32,
+                  color: Colors.black,
+                ),
+                tooltip: _isPaused ? 'Resume' : 'Pause',
+                onPressed: _togglePause,
+              ),
+            ),
+          ]),
+        ));
   }
 }
 
