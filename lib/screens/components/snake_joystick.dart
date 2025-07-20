@@ -6,6 +6,7 @@ import 'package:flutter_joystick/flutter_joystick.dart';
 import 'package:flutter_snake/constans/theme_constants.dart';
 
 enum StickDirection { up, down, left, right, none }
+enum ControlType { joystick, touchArrows, swipe }
 
 class SnakeJoystick extends StatefulWidget {
   final void Function(StickDirection dir) onDirectionChanged;

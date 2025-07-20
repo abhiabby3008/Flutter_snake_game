@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_snake/screens/game_screen.dart';
 import 'package:flutter_snake/screens/on_board_screen.dart';
 
 void main() {
